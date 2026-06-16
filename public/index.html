@@ -17,45 +17,61 @@
         
         <div id="auth-block" class="bg-slate-800 p-6 rounded-lg shadow-xl text-center max-w-sm w-full">
             <h2 class="text-xl mb-4">Введи своё имя за столом:</h2>
-            <input type="text" id="username" class="w-full p-2 rounded bg-slate-700 text-white border border-slate-600 mb-4 text-center text-lg font-semibold focus:outline-none focus:border-amber-400" placeholder="Имя">
-            <button onclick="connectToServer()" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-2 rounded transition">Войти в лобби</button>
+            <input type="text" id="username" class="w-full p-2 rounded bg-slate-700 text-white border border-slate-600 mb-4 text-center text-lg font-semibold focus:outline-none focus:border-amber-400" placeholder="Твоё имя">
+            <button onclick="connectToServer()" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-2 rounded transition shadow-lg">Войти в лобби</button>
+            <p class="text-xs text-rose-400 mt-4">⚠️ Во время игры не обновляй страницу, иначе разорвется соединение с сервером!</p>
         </div>
 
-        <div id="game-block" class="w-full max-w-4xl hidden flex- flex-col md:flex-row gap-6">
-            
-            <div class="bg-slate-800 p-4 rounded-lg flex-1">
+        <div id="game-block" class="w-full max-w-4xl hidden flex flex-col md:flex-row gap-6">
+            <div class="bg-slate-800 p-4 rounded-lg flex-1 shadow-lg">
                 <h3 class="text-xl text-amber-400 font-semibold mb-3 border-b border-slate-700 pb-1">Игроки за столом</h3>
                 <div id="players-list" class="space-y-2"></div>
-                <button id="start-btn" onclick="startGame()" class="w-full mt-6 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded hidden shadow-lg">🚀 Начать игру</button>
+                <button id="start-btn" onclick="startGame()" class="w-full mt-6 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded hidden shadow-lg transition">🚀 Начать игру</button>
             </div>
 
-            <div class="bg-slate-800 p-4 rounded-lg flex-[2] flex flex-col justify-between min-h-[350px]">
+            <div class="bg-slate-800 p-4 rounded-lg flex-[2] flex flex-col justify-between min-h-[350px] shadow-lg">
                 <div>
                     <h3 class="text-xl text-center font-semibold mb-4 text-slate-400">Карты на столе</h3>
-                    <div id="table-cards" class="flex justify-center gap-4 min-h-[100px] items-center border border-dashed border-slate-700 rounded-lg p-4">
+                    <div id="table-cards" class="flex justify-center flex-wrap gap-4 min-h-[100px] items-center border border-dashed border-slate-700 rounded-lg p-4 bg-slate-800/50">
                         <p class="text-slate-500">На столе пока пусто</p>
                     </div>
                 </div>
+                
                 <div id="action-block" class="mt-6 text-center hidden">
-                    <p id="action-prompt" class="text-lg text-amber-300 mb-2"></p>
-                    <div id="action-buttons" class="flex justify-center gap-4"></div>
+                    <p id="action-prompt" class="text-lg text-amber-300 mb-3 font-semibold"></p>
+                    <div id="action-buttons" class="flex justify-center gap-4 flex-wrap"></div>
                 </div>
             </div>
         </div>
     </main>
 
     <footer id="hand-block" class="bg-slate-950 p-6 shadow-2xl text-center hidden border-t border-slate-800">
-        <h3 class="text-sm text-slate-400 mb-2">Твои карты на руках:</h3>
+        <h3 class="text-sm text-slate-400 mb-3">Твои карты на руках:</h3>
         <div id="my-cards" class="flex justify-center gap-3 overflow-x-auto pb-2"></div>
     </footer>
 
     <script>
         let ws;
-        const clientId = 'usr_' + Math.random().toString(36).substr(2, 9);
+        
+        // Пытаемся вспомнить пользователя, чтобы при случайном F5 он переподключился под тем же ID
+        let clientId = localStorage.getItem('petushok_clientId');
+        if (!clientId) {
+            clientId = 'usr_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('petushok_clientId', clientId);
+        }
+
+        // Подгружаем имя, если оно вводилось ранее
+        window.onload = () => {
+            const savedName = localStorage.getItem('petushok_username');
+            if (savedName) document.getElementById('username').value = savedName;
+        };
 
         function connectToServer() {
             const name = document.getElementById('username').value.trim();
-            if (!name) return alert('Введите имя!');
+            if (!name) return alert('Пожалуйста, введите имя!');
+
+            // Сохраняем имя на будущее
+            localStorage.setItem('petushok_username', name);
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(`${protocol}//${window.location.host}/ws/${clientId}/${encodeURIComponent(name)}`);
@@ -67,7 +83,14 @@
                 }
             };
 
-            // Переключаем экраны при успешном клике
+            ws.onclose = function() {
+                // Если сервер отвалится, кнопка входа появится снова
+                document.getElementById('auth-block').classList.remove('hidden');
+                document.getElementById('game-block').classList.add('hidden');
+                document.getElementById('hand-block').classList.add('hidden');
+            };
+
+            // Скрываем окно ввода, показываем стол
             document.getElementById('auth-block').classList.add('hidden');
             document.getElementById('game-block').classList.remove('hidden');
             document.getElementById('hand-block').classList.remove('hidden');
@@ -109,7 +132,7 @@
             if (state.current_trick.length > 0) {
                 table.innerHTML = state.current_trick.map(t => `
                     <div class="bg-slate-700 p-3 rounded shadow-md text-center border border-slate-600 min-w-[70px]">
-                        <div class="text-xs text-slate-400 mb-1">${t.player_name}</div>
+                        <div class="text-xs text-slate-400 mb-1 truncate max-w-[80px]" title="${t.player_name}">${t.player_name}</div>
                         <div class="text-xl font-bold ${['♥️','♦️'].includes(t.card.suit) ? 'text-red-500' : 'text-white'}">${t.card.str}</div>
                     </div>
                 `).join('');
@@ -131,17 +154,17 @@
                 if (state.status === 'myrat') {
                     actPrompt.innerText = "Твой черед: Забираешь карты Мырата из центра?";
                     actBtns.innerHTML = `
-                        <button onclick="sendAction('MYRAT_DECISION', 'take')" class="bg-amber-500 text-slate-900 px-4 py-2 rounded font-bold transition hover:bg-amber-600">Взять Мырат 🔄</button>
-                        <button onclick="sendAction('MYRAT_DECISION', 'pass')" class="bg-slate-600 px-4 py-2 rounded transition hover:bg-slate-500">Пропустить ➡️</button>
+                        <button onclick="sendAction('MYRAT_DECISION', 'take')" class="bg-amber-500 text-slate-900 px-4 py-2 rounded font-bold transition hover:bg-amber-600 shadow">Взять Мырат 🔄</button>
+                        <button onclick="sendAction('MYRAT_DECISION', 'pass')" class="bg-slate-600 px-4 py-2 rounded transition hover:bg-slate-500 shadow">Пропустить ➡️</button>
                     `;
                 } else if (state.status === 'declaration') {
                     actPrompt.innerText = "Идешь в бой или пасуешь?";
                     const foldBtn = state.can_fold 
-                        ? `<button onclick="sendAction('DECLARATION_DECISION', 'fold')" class="bg-rose-600 px-4 py-2 rounded font-bold transition hover:bg-rose-700">Пас 🛑</button>`
-                        : `<button class="bg-slate-700 text-slate-500 px-4 py-2 rounded cursor-not-allowed opacity-50" title="Осталось 2 человека, пасовать нельзя!" disabled>Пас заблокирован 🔒</button>`;
+                        ? `<button onclick="sendAction('DECLARATION_DECISION', 'fold')" class="bg-rose-600 px-4 py-2 rounded font-bold transition hover:bg-rose-700 shadow">Пас 🛑</button>`
+                        : `<button class="bg-slate-700 text-slate-500 px-4 py-2 rounded cursor-not-allowed opacity-50 shadow" title="Осталось 2 человека, пасовать нельзя!" disabled>Пас заблокирован 🔒</button>`;
                         
                     actBtns.innerHTML = `
-                        <button onclick="sendAction('DECLARATION_DECISION', 'play')" class="bg-emerald-500 px-4 py-2 rounded font-bold transition hover:bg-emerald-600">Играть ⚔️</button>
+                        <button onclick="sendAction('DECLARATION_DECISION', 'play')" class="bg-emerald-500 px-4 py-2 rounded font-bold transition hover:bg-emerald-600 shadow">Играть ⚔️</button>
                         ${foldBtn}
                     `;
                 }
@@ -157,8 +180,8 @@
                 
                 handContainer.innerHTML += `
                     <div onclick="${canPlay ? `sendAction('PLAY_CARD', '', {card_idx: ${idx}})` : ''}" 
-                         class="bg-slate-800 border-2 ${canPlay ? 'border-amber-400 hover:-translate-y-2 cursor-pointer' : 'border-slate-700'} p-4 rounded-lg shadow-md min-w-[80px] text-center select-none transition">
-                        <div class="text-2xl font-bold ${isRed ? 'text-red-500' : 'text-white'}">${card.str}</div>
+                         class="bg-slate-800 border-2 ${canPlay ? 'border-amber-400 hover:-translate-y-2 cursor-pointer shadow-lg' : 'border-slate-700'} p-4 rounded-lg min-w-[60px] md:min-w-[80px] text-center select-none transition">
+                        <div class="text-xl md:text-2xl font-bold ${isRed ? 'text-red-500' : 'text-white'}">${card.str}</div>
                     </div>
                 `;
             });
